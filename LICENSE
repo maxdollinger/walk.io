@@ -1,0 +1,52 @@
+Business Source License 1.1
+
+Parameters:
+
+    Licensor: walk.io contributors
+    Licensed Work: walk.io
+
+For information about alternative licensing arrangements for the Licensed Work,
+please contact the Licensor.
+
+Notice
+
+The Business Source License (this document, or the "License") sets forth the
+terms and conditions under which the Licensor makes the Licensed Work available
+and may only be complied with if you have the prior written consent of the
+Licensor. For the avoidance of doubt, this is not an open source license. If you
+have an open source license concern, please contact the Licensor.
+
+Terms
+
+The Licensor hereby grants you the right to copy, modify, and distribute the
+Licensed Work, subject to the following conditions:
+
+1. You may not sell the Licensed Work, or offer it as part of a service or
+   product that is sold for revenue, unless you first obtain a commercial
+   license from the Licensor.
+
+2. You may use the Licensed Work for internal business purposes, including
+   running it on your own servers and infrastructure.
+
+3. You may modify the Licensed Work and use the modified version, provided you
+   maintain this License with the modified code.
+
+4. You must retain, in the source code of any modified versions of the Licensed
+   Work that you distribute, all copyright, patent, trademark, and attribution
+   notices from the original Licensed Work (excluding those notices that do not
+   pertain to any part of the derivative works).
+
+5. If the Licensed Work, or a portion of it, becomes available under a different
+   license (such as the MIT License on the Change Date), you may use it under
+   the terms of that license going forward.
+
+Limitations
+
+THIS LICENSED WORK IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN
+AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE LICENSED WORK OR THE USE OR OTHER DEALINGS IN THE LICENSED WORK.
+
+
