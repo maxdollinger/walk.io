@@ -2,6 +2,7 @@ package oci
 
 import (
 	"context"
+	"io"
 
 	"github.com/opencontainers/go-digest"
 )
@@ -11,6 +12,7 @@ type Layer interface {
 	Digest() digest.Digest
 	Size() int64
 	MediaType() string
-	// Extract writes the layer contents to the target directory
-	Extract(ctx context.Context, target string) error
+	// Compressed returns a reader for the compressed (tar.gz) layer data
+	// The caller must close the reader when done
+	Compressed(ctx context.Context) (io.ReadCloser, error)
 }

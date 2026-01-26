@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
+	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -22,8 +24,23 @@ type RegistryProvider struct {
 	imageRef name.Reference // e.g., "nginx:latest" or "docker.io/nginx:latest"
 }
 
+// NewRegistryProvider creates a new provider for the given image reference
+// ref can be:
+//   - "nginx:latest" (defaults to docker.io/library)
+//   - "docker.io/nginx:latest"
+//   - "ghcr.io/owner/repo:tag"
+//   - "localhost:5000/image:tag"
 func NewRegistryProvider(imageRef string) (*RegistryProvider, error) {
-	ref, err := name.ParseReference(imageRef)
+	// Add docker.io default if no registry specified
+	normalizedRef := imageRef
+	if !strings.Contains(imageRef, "/") {
+		normalizedRef = "docker.io/library/" + imageRef
+	} else if !strings.Contains(strings.Split(imageRef, "/")[0], ".") && !strings.Contains(strings.Split(imageRef, "/")[0], ":") {
+		// If first component has no dots or colons, prepend docker.io
+		normalizedRef = "docker.io/" + imageRef
+	}
+
+	ref, err := name.ParseReference(normalizedRef)
 	if err != nil {
 		return nil, fmt.Errorf("invalid image reference: %w", err)
 	}
@@ -39,8 +56,14 @@ func (p *RegistryProvider) Info() string {
 
 // GetImage fetches the image from the registry and returns an Image with all layers
 func (p *RegistryProvider) GetImage(ctx context.Context) (*Image, error) {
+	platformStr := fmt.Sprintf("linux/%s", runtime.GOARCH)
+	platform, err := v1.ParsePlatform(platformStr)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse platform: %w", err)
+	}
+
 	// Fetch the image from the registry
-	img, err := remote.Image(p.imageRef, remote.WithContext(ctx))
+	img, err := remote.Image(p.imageRef, remote.WithContext(ctx), remote.WithPlatform(*platform))
 	if err != nil {
 		return nil, fmt.Errorf("fetch image: %w", err)
 	}
@@ -145,22 +168,13 @@ func (l *registryLayer) MediaType() string {
 	return string(mediaType)
 }
 
-// Extract downloads and extracts the layer to the target directory
-// The layer is compressed (tar.gz), so the LayerFlattener will handle decompression
-func (l *registryLayer) Extract(ctx context.Context, target string) error {
+// Compressed returns a reader for the compressed (tar.gz) layer data
+func (l *registryLayer) Compressed(ctx context.Context) (io.ReadCloser, error) {
 	reader, err := l.layer.Compressed()
 	if err != nil {
-		return fmt.Errorf("get compressed layer: %w", err)
+		return nil, fmt.Errorf("get compressed layer: %w", err)
 	}
-	defer reader.Close()
-
-	// Copy the compressed tar.gz content to target
-	// The LayerFlattener will handle decompression and merging
-	if _, err := io.Copy(io.Discard, reader); err != nil {
-		return fmt.Errorf("read layer: %w", err)
-	}
-
-	return nil
+	return reader, nil
 }
 
 // NoOpImageProvider for testing
