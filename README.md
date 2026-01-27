@@ -100,20 +100,13 @@ Compared to containers:
 
 🚧 **Early development / research phase**
 
-What exists or is being implemented:
+What exists:
 
-* OCI image pulling and config parsing
-* ext4 root filesystem creation
-* Firecracker boot with custom `/init`
-* Basic VM lifecycle (start / stop)
-* Networking experiments (NAT-first)
+* Building of ext4 block device from OCI Image (pulling from registry)
 
 What’s coming next:
 
-* Builder CLI (`walk-builder`)
-* Daemon API (`walkd`)
-* Activator (request → VM boot)
-* Simple reverse proxy integration
+* vm controller
 
 ---
 
