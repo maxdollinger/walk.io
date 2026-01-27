@@ -12,14 +12,14 @@ import (
 )
 
 func main() {
-	bldr := builder.NewBuilder(fs.NewLayerFlattener(), fs.NewAppConfigWriter(), fs.NewNoOpBlockDeviceBuilder(), lock.NewNoOpLocker())
+	bldr := builder.NewBuilder(fs.NewLayerFlattener(), fs.NewAppConfigWriter(), fs.NewExt4Builder(), lock.NewNoOpLocker())
 	registry, err := oci.NewRegistryProvider("oven/bun:latest")
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		os.Exit(1)
 	}
 
-	result, err := bldr.Build(context.Background(), registry, builder.BuildOptions{OutputDir: "~/walkio/"})
+	result, err := bldr.Build(context.Background(), registry, builder.BuildOptions{OutputDir: "/var/walkio/app"})
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		os.Exit(1)

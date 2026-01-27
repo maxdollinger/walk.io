@@ -141,8 +141,8 @@ func (b *builder) Build(ctx context.Context, provider oci.ImageProvider, opts Bu
 
 	b.logger.InfoContext(ctx, "creating block device", "output", outputPath)
 	blockDevice, err := b.blockDeviceBuilder.NewDevice(ctx, fs.BlockDeviceOptions{
-		SourceDir:  rootfsDir,
-		OutputPath: outputPath,
+		SourceDirPath:  rootfsDir,
+		OutputFilePath: outputPath,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create block device: %w", err)
