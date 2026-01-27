@@ -12,8 +12,8 @@ import (
 )
 
 func main() {
-	bldr := builder.NewBuilder(fs.NewLayerFlattener(), fs.NewNoOpFilesystemPreparer(), fs.NewNoOpBlockDeviceBuilder(), lock.NewNoOpLocker())
-	registry, err := oci.NewRegistryProvider("hello-world:latest")
+	bldr := builder.NewBuilder(fs.NewLayerFlattener(), fs.NewAppConfigWriter(), fs.NewNoOpBlockDeviceBuilder(), lock.NewNoOpLocker())
+	registry, err := oci.NewRegistryProvider("oven/bun:latest")
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		os.Exit(1)

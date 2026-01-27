@@ -34,7 +34,7 @@ type BuildResult struct {
 
 type builder struct {
 	fsBuilder          fs.FsBuilder
-	configInjector     fs.AppConfigInjector
+	configWriter       fs.ConfigWriter
 	blockDeviceBuilder fs.BlockDeviceBuilder
 	locker             lock.Locker
 	logger             *slog.Logger
@@ -42,13 +42,13 @@ type builder struct {
 
 func NewBuilder(
 	fsBuilder fs.FsBuilder,
-	configInjector fs.AppConfigInjector,
+	configInjector fs.ConfigWriter,
 	blockDeviceBuilder fs.BlockDeviceBuilder,
 	locker lock.Locker,
 ) Builder {
 	return &builder{
 		fsBuilder:          fsBuilder,
-		configInjector:     configInjector,
+		configWriter:       configInjector,
 		blockDeviceBuilder: blockDeviceBuilder,
 		locker:             locker,
 		logger:             slog.Default(),
@@ -111,7 +111,7 @@ func (b *builder) Build(ctx context.Context, provider oci.ImageProvider, opts Bu
 	}
 
 	workDir := os.TempDir()
-	buildDir := filepath.Join(workDir, "walkio-build", digestHex)
+	buildDir := filepath.Join(workDir, "walkio", "build", digestHex)
 	b.logger.DebugContext(ctx, "creating work directory", "path", buildDir)
 
 	if err := os.MkdirAll(buildDir, 0o755); err != nil {
@@ -135,7 +135,7 @@ func (b *builder) Build(ctx context.Context, provider oci.ImageProvider, opts Bu
 	}
 
 	b.logger.InfoContext(ctx, "preparing rootfs with walk.io metadata")
-	if err := b.configInjector.InjectAppConfig(ctx, rootfsDir, image.Config); err != nil {
+	if err := b.configWriter.WriteConfig(ctx, rootfsDir, image.Config); err != nil {
 		return nil, fmt.Errorf("failed to prepare rootfs: %w", err)
 	}
 
