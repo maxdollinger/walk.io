@@ -13,13 +13,18 @@ import (
 
 func main() {
 	bldr := builder.NewBuilder(fs.NewLayerFlattener(), fs.NewAppConfigWriter(), fs.NewExt4Builder(), lock.NewNoOpLocker())
-	registry, err := oci.NewRegistryProvider("oven/bun:latest")
+	imageSource, err := oci.NewRegistryProvider("oven/bun:latest")
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		os.Exit(1)
 	}
 
-	result, err := bldr.Build(context.Background(), registry, builder.BuildOptions{OutputDir: "/var/walkio/app"})
+	imageDir := os.Getenv("WALKIO_OUT_DIR")
+	if len(imageDir) == 0 {
+		imageDir = "/var/lib/walkio/app"
+	}
+
+	result, err := bldr.Build(context.Background(), imageSource, builder.BuildOptions{OutputDir: imageDir})
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		os.Exit(1)

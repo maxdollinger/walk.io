@@ -30,7 +30,7 @@ type RegistryProvider struct {
 //   - "docker.io/nginx:latest"
 //   - "ghcr.io/owner/repo:tag"
 //   - "localhost:5000/image:tag"
-func NewRegistryProvider(imageRef string) (*RegistryProvider, error) {
+func NewRegistryProvider(imageRef string) (OciImageSource, error) {
 	// Add docker.io default if no registry specified
 	normalizedRef := imageRef
 	if !strings.Contains(imageRef, "/") {

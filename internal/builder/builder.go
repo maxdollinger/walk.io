@@ -16,7 +16,7 @@ import (
 )
 
 type Builder interface {
-	Build(ctx context.Context, provider oci.ImageProvider, opts BuildOptions) (*BuildResult, error)
+	Build(ctx context.Context, provider oci.OciImageSource, opts BuildOptions) (*BuildResult, error)
 }
 
 type BuildOptions struct {
@@ -55,7 +55,7 @@ func NewBuilder(
 	}
 }
 
-func (b *builder) Build(ctx context.Context, provider oci.ImageProvider, opts BuildOptions) (*BuildResult, error) {
+func (b *builder) Build(ctx context.Context, provider oci.OciImageSource, opts BuildOptions) (*BuildResult, error) {
 	startTime := time.Now()
 
 	b.logger.InfoContext(ctx, "starting build", "providerInfo", provider.Info())
