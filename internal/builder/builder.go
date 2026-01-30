@@ -3,14 +3,16 @@ package builder
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/maxdollinger/walk.io/pkg/fs"
-	"github.com/maxdollinger/walk.io/pkg/lock"
 	"github.com/maxdollinger/walk.io/pkg/oci"
 	"github.com/opencontainers/go-digest"
 )
@@ -21,6 +23,7 @@ type Builder interface {
 
 type BuildOptions struct {
 	OutputDir string // where to place final .ext4 files
+	WorkDir   string
 }
 
 // BuildResult contains information about the built artifact
@@ -36,7 +39,6 @@ type builder struct {
 	fsBuilder          fs.FsBuilder
 	configWriter       fs.ConfigWriter
 	blockDeviceBuilder fs.BlockDeviceBuilder
-	locker             lock.Locker
 	logger             *slog.Logger
 }
 
@@ -44,21 +46,24 @@ func NewBuilder(
 	fsBuilder fs.FsBuilder,
 	configInjector fs.ConfigWriter,
 	blockDeviceBuilder fs.BlockDeviceBuilder,
-	locker lock.Locker,
 ) Builder {
 	return &builder{
 		fsBuilder:          fsBuilder,
 		configWriter:       configInjector,
 		blockDeviceBuilder: blockDeviceBuilder,
-		locker:             locker,
 		logger:             slog.Default(),
 	}
 }
 
 func (b *builder) Build(ctx context.Context, provider oci.OciImageSource, opts BuildOptions) (*BuildResult, error) {
 	startTime := time.Now()
+	buildTimeStamp := startTime.Unix()
 
 	b.logger.InfoContext(ctx, "starting build", "providerInfo", provider.Info())
+
+	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create output directory: %w", err)
+	}
 
 	image, err := provider.GetImage(ctx)
 	if err != nil {
@@ -69,56 +74,22 @@ func (b *builder) Build(ctx context.Context, provider oci.OciImageSource, opts B
 	b.logger = b.logger.With("digest", digestHex)
 	b.logger.InfoContext(ctx, "image fetched", "layers", len(image.Layers))
 
-	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	outputPath := filepath.Join(opts.OutputDir, fmt.Sprintf("%s.ext4", digestHex))
-
-	if fileExists(outputPath) {
-		b.logger.InfoContext(ctx, "using cached block device", "path", outputPath)
-		return &BuildResult{
-			BlockDevicePath: outputPath,
-			SourceDigest:    image.Digest,
-			ImageConfig:     image.Config,
-			BuildTime:       time.Since(startTime),
-			Cached:          true,
-		}, nil
-	}
-
-	b.logger.DebugContext(ctx, "acquiring lock")
-	lockHandle, err := b.locker.AcquireLock(ctx, image.Digest)
+	// build is fresh invoked so set the wanted to this build
+	wantedFile := path.Join(opts.OutputDir, digestHex+".wanted")
+	err = fs.WriteFileAtomic(wantedFile, []byte(strconv.FormatInt(buildTimeStamp, 10)), 0o644)
 	if err != nil {
-		return nil, fmt.Errorf("failed to acquire lock: %w", err)
-	}
-	defer func() {
-		if err := lockHandle.Release(); err != nil {
-			b.logger.WarnContext(ctx, "failed to release lock", "error", err)
-		}
-	}()
-
-	b.logger.DebugContext(ctx, "lock acquired")
-
-	if fileExists(outputPath) {
-		b.logger.InfoContext(ctx, "block device created while waiting for lock", "path", outputPath)
-		return &BuildResult{
-			BlockDevicePath: outputPath,
-			SourceDigest:    image.Digest,
-			ImageConfig:     image.Config,
-			BuildTime:       time.Since(startTime),
-			Cached:          true,
-		}, nil
+		return nil, fmt.Errorf("error writing wanted file: %w", err)
 	}
 
-	workDir := os.TempDir()
-	buildDir := filepath.Join(workDir, "walkio", "build", digestHex)
-	b.logger.DebugContext(ctx, "creating work directory", "path", buildDir)
+	buildRun := fmt.Sprintf("%s-%d", digestHex, buildTimeStamp)
+	buildDir := filepath.Join(opts.WorkDir, "walkio", "build", buildRun)
+	b.logger.DebugContext(ctx, "creating build directory", "path", buildDir)
 
 	if err := os.MkdirAll(buildDir, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create work directory: %w", err)
+		return nil, fmt.Errorf("failed to create build directory: %w", err)
 	}
 	defer func() {
-		b.logger.DebugContext(ctx, "cleaning up work directory", "path", buildDir)
+		b.logger.DebugContext(ctx, "cleaning up build directory", "path", buildDir)
 		if err := os.RemoveAll(buildDir); err != nil {
 			b.logger.WarnContext(ctx, "failed to cleanup work directory", "error", err, "path", buildDir)
 		}
@@ -139,21 +110,36 @@ func (b *builder) Build(ctx context.Context, provider oci.OciImageSource, opts B
 		return nil, fmt.Errorf("failed to prepare rootfs: %w", err)
 	}
 
-	b.logger.InfoContext(ctx, "creating block device", "output", outputPath)
-	blockDevice, err := b.blockDeviceBuilder.NewDevice(ctx, fs.BlockDeviceOptions{
+	// to ensur atomicity of the later rename the tpm build output is placed in the the dir as the final file
+	tmpBuildFilePath := filepath.Join(opts.OutputDir, buildRun+".ext4")
+	b.logger.InfoContext(ctx, "creating block device", "output", tmpBuildFilePath)
+	tmpBlockDevice, err := b.blockDeviceBuilder.NewDevice(ctx, fs.BlockDeviceOptions{
 		SourceDirPath:  rootfsDir,
-		OutputFilePath: outputPath,
+		BuildDirPath:   buildDir,
+		OutputFilePath: tmpBuildFilePath,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create block device: %w", err)
 	}
+	defer os.Remove(tmpBuildFilePath)
+
+	if !isNewstBuild(wantedFile, buildTimeStamp) {
+		return nil, errors.New("newer build detected not publishing")
+	}
+
+	// atomic publish of newest build
+	outputFilePath := path.Join(opts.OutputDir, digestHex+".ext4")
+	err = os.Rename(tmpBlockDevice.Path, outputFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("error publishing buildresult: %w", err)
+	}
 
 	b.logger.InfoContext(ctx, "build completed successfully",
-		"size_mb", blockDevice.SizeBytes/1024/1024,
+		"size_mb", tmpBlockDevice.SizeBytes/1024/1024,
 		"duration", time.Since(startTime))
 
 	return &BuildResult{
-		BlockDevicePath: blockDevice.Path,
+		BlockDevicePath: outputFilePath,
 		SourceDigest:    image.Digest,
 		ImageConfig:     image.Config,
 		BuildTime:       time.Since(startTime),
@@ -161,7 +147,16 @@ func (b *builder) Build(ctx context.Context, provider oci.OciImageSource, opts B
 	}, nil
 }
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
+func isNewstBuild(filePath string, timestamp int64) bool {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return true
+	}
+
+	ts, err := strconv.ParseInt(string(data), 10, 64)
+	if err != nil {
+		return true
+	}
+
+	return ts <= timestamp
 }

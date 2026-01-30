@@ -7,12 +7,11 @@ import (
 
 	"github.com/maxdollinger/walk.io/internal/builder"
 	"github.com/maxdollinger/walk.io/pkg/fs"
-	"github.com/maxdollinger/walk.io/pkg/lock"
 	"github.com/maxdollinger/walk.io/pkg/oci"
 )
 
 func main() {
-	bldr := builder.NewBuilder(fs.NewLayerFlattener(), fs.NewAppConfigWriter(), fs.NewExt4Builder(), lock.NewNoOpLocker())
+	bldr := builder.NewBuilder(fs.NewLayerFlattener(), fs.NewAppConfigWriter(), fs.NewExt4Builder())
 	imageSource, err := oci.NewRegistryProvider("oven/bun:latest")
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
@@ -24,9 +23,13 @@ func main() {
 		imageDir = "/var/lib/walkio/app"
 	}
 
-	result, err := bldr.Build(context.Background(), imageSource, builder.BuildOptions{OutputDir: imageDir})
+	buildOpts := builder.BuildOptions{
+		OutputDir: imageDir,
+		WorkDir:   os.TempDir(),
+	}
+	result, err := bldr.Build(context.Background(), imageSource, buildOpts)
 	if err != nil {
-		fmt.Printf("Error: %s\n", err)
+		fmt.Println(err)
 		os.Exit(1)
 	}
 
