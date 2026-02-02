@@ -11,6 +11,8 @@ without the complexity of Kubernetes or a full multi-node cloud.
 
 You can think of it as a **single-node, opinionated, simpler Fly.io**.
 
+Firecracker, Kernel and Rootfs builds are released under [walk.io-base](https://github.com/maxdollinger/walk.io-base)
+
 ---
 
 ## Goals
