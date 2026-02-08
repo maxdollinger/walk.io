@@ -8,11 +8,8 @@ import (
 
 type App struct {
 	ID               string // unique application identifier
-	ImageName        string // OCI image name (e.g., "nginx:latest")
-	EnvJson          string // JSON-encoded environment variables
-	ArgsJson         string // JSON-encoded command arguments
-	WorkDir          string // working directory in container
-	KernelPath       string // path to firecracker kernel for this app
+	Digest           string // OCI image digest (e.g., "sha256:abc123...")
+	BaseVersion      string // base bundle version (e.g., "v1.0", "v2.0") references /var/lib/walkio/base/[version]
 	StateFsSizeBytes int64  // size of StateFS in bytes (default 1GB)
 	CreatedAt        time.Time
 	UpdatedAt        time.Time

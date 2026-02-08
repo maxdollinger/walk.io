@@ -5,9 +5,11 @@ import "time"
 // VMConfig holds essential Firecracker VM configuration.
 // This is intentionally minimal to keep the design clean and extensible.
 type VMConfig struct {
+	RootFsPath  string        // path to /var/lib/walkio/base/[version]/rootfs.ext4 (pre-built, shared)
 	AppFsPath   string        // path to /var/lib/walkio/apps/{digest}.ext4
 	StateFsPath string        // path to /var/lib/walkio/state/{uuid}.ext4
-	KernelPath  string        // path to firecracker kernel (app-specific)
+	KernelPath  string        // path to firecracker kernel from base bundle
+	BaseVersion string        // base bundle version (e.g., "v1.0") for reference/logging
 	VCPU        int           // number of vCPUs (default: 1)
 	Memory      int           // memory in MB (default: 512)
 	Timeout     time.Duration // operation timeout

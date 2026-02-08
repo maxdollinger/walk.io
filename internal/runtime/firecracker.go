@@ -187,12 +187,13 @@ func (f *firecracker) Status(ctx context.Context, instance *VMInstance) (VMStatu
 // --- Private Helper Methods ---
 
 // validateConfig checks that all required paths exist and are valid.
+// Validates all three block devices: rootfs (pre-built, shared), appfs (built from OCI), and statefs (empty writable).
 func (f *firecracker) validateConfig(config VMConfig) error {
+	if _, err := os.Stat(config.RootFsPath); err != nil {
+		return fmt.Errorf("rootfs not found at %s: %w", config.RootFsPath, err)
+	}
 	if _, err := os.Stat(config.AppFsPath); err != nil {
 		return fmt.Errorf("appfs not found at %s: %w", config.AppFsPath, err)
-	}
-	if _, err := os.Stat(config.StateFsPath); err != nil {
-		return fmt.Errorf("statefs not found at %s: %w", config.StateFsPath, err)
 	}
 	if _, err := os.Stat(config.KernelPath); err != nil {
 		return fmt.Errorf("kernel not found at %s: %w", config.KernelPath, err)
@@ -207,7 +208,13 @@ func (f *firecracker) validateConfig(config VMConfig) error {
 }
 
 // buildFirecrackerConfig creates the Firecracker JSON configuration.
-// This mounts AppFs as root (read-only) and StateFS as second drive (writable).
+// Configures three block devices in order:
+//  1. rootfs (root device, read-only, pre-built) - /var/lib/walkio/base/[version]/rootfs.ext4
+//     Shared across multiple VMs, contains system initialization and boot scripts.
+//  2. app (secondary device, read-only) - /var/lib/walkio/apps/[digest].ext4
+//     Built from OCI image layers, contains application code and data.
+//  3. state (secondary device, writable) - /var/lib/walkio/state/[vm-uuid].ext4
+//     Empty ext4 filesystem, writable layer for runtime state (logs, temp files, etc).
 func (f *firecracker) buildFirecrackerConfig(config VMConfig, socketPath string) map[string]interface{} {
 	return map[string]interface{}{
 		"vm_config": map[string]interface{}{
@@ -218,12 +225,21 @@ func (f *firecracker) buildFirecrackerConfig(config VMConfig, socketPath string)
 			"kernel_image_path": config.KernelPath,
 		},
 		"drives": []map[string]interface{}{
+			// Drive 1: RootFS - system initialization (root device, read-only, shared)
 			{
-				"drive_id":       "root",
-				"path_on_host":   config.AppFsPath,
+				"drive_id":       "rootfs",
+				"path_on_host":   config.RootFsPath,
 				"is_root_device": true,
 				"is_read_only":   true,
 			},
+			// Drive 2: AppFS - application code/data (secondary, read-only)
+			{
+				"drive_id":       "app",
+				"path_on_host":   config.AppFsPath,
+				"is_root_device": false,
+				"is_read_only":   true,
+			},
+			// Drive 3: StateFS - runtime state (secondary, writable)
 			{
 				"drive_id":       "state",
 				"path_on_host":   config.StateFsPath,
