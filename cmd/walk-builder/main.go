@@ -11,7 +11,16 @@ import (
 )
 
 func main() {
-	bldr := builder.NewBuilder(fs.NewLayerFlattener(), fs.NewAppConfigWriter(), fs.NewExt4Builder())
+	// Create filesystem builder components
+	layerFlattener := fs.NewLayerFlattener()
+	blockDeviceBuilder := fs.NewExt4Builder()
+
+	// Create orchestrator
+	orchestrator := fs.NewFSBuilderOrchestrator(layerFlattener, blockDeviceBuilder)
+
+	// Create builder
+	bldr := builder.NewBuilder(orchestrator)
+
 	imageSource, err := oci.NewRegistryProvider("oven/bun:latest")
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
