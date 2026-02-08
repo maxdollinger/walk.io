@@ -134,13 +134,12 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig) (*VMInstance, 
 
 	// Return VMInstance
 	return &VMInstance{
-		ID:          id,
-		AppID:       "", // populated by caller
-		PID:         pid,
-		SocketPath:  socketPath,
-		StateFsPath: config.StateFsPath,
-		Meta:        make(map[string]interface{}),
-		StartedAt:   time.Now(),
+		ID:         id,
+		AppID:      config.AppID,
+		PID:        pid,
+		SocketPath: socketPath,
+		Meta:       make(map[string]interface{}),
+		StartedAt:  time.Now(),
 	}, nil
 }
 
