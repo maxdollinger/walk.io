@@ -12,34 +12,19 @@ import (
 	"github.com/maxdollinger/walk.io/pkg/oci"
 )
 
-// AppConfigWriter implements BuilderConfig for application filesystems.
-// It injects OCI image metadata (/walkio/env, /walkio/argv) into the rootfs.
-type AppConfigWriter struct {
-	imageConfig *oci.ImageConfig
-}
-
-// NewAppConfigWriter creates a new AppConfigWriter for the given image config.
-func NewAppConfigWriter(imageConfig *oci.ImageConfig) *AppConfigWriter {
-	return &AppConfigWriter{
-		imageConfig: imageConfig,
-	}
-}
-
-// WriteConfig injects /walkio/env and /walkio/argv into the rootfs.
-// This implements the BuilderConfig interface.
-func (w *AppConfigWriter) WriteConfig(ctx context.Context, rootfsDir string) error {
+func WriteContainerConfig(ctx context.Context, config *oci.ImageConfig, rootfsDir string) error {
 	configDir := path.Join(rootfsDir, "walkio")
 	err := os.MkdirAll(configDir, 0o755)
 	if err != nil {
 		return fmt.Errorf("create walkio directory: %w", err)
 	}
 
-	err = w.writeEnv(configDir)
+	err = writeAppEnv(configDir, config)
 	if err != nil {
 		return fmt.Errorf("write env file: %w", err)
 	}
 
-	err = w.writeArgv(configDir)
+	err = writeAppArgv(configDir, config)
 	if err != nil {
 		return fmt.Errorf("write argv file: %w", err)
 	}
@@ -48,11 +33,11 @@ func (w *AppConfigWriter) WriteConfig(ctx context.Context, rootfsDir string) err
 }
 
 // writeEnv creates /walkio/env file with environment variables from image config.
-func (w *AppConfigWriter) writeEnv(configDir string) error {
+func writeAppEnv(configDir string, config *oci.ImageConfig) error {
 	var env bytes.Buffer
 	writer := bufio.NewWriter(&env)
 
-	for _, line := range w.imageConfig.Env {
+	for _, line := range config.Env {
 		_, err := writer.WriteString(strings.TrimSpace(line))
 		if err != nil {
 			return fmt.Errorf("write env to buffer: %w", err)
@@ -64,8 +49,8 @@ func (w *AppConfigWriter) writeEnv(configDir string) error {
 	}
 
 	workdir := "/"
-	if len(w.imageConfig.WorkingDir) > 0 {
-		workdir = w.imageConfig.WorkingDir
+	if len(config.WorkingDir) > 0 {
+		workdir = config.WorkingDir
 	}
 	_, err := fmt.Fprintf(writer, "WORKDIR=%s", workdir)
 	if err != nil {
@@ -87,11 +72,11 @@ func (w *AppConfigWriter) writeEnv(configDir string) error {
 }
 
 // writeArgv creates /walkio/argv file with entrypoint and cmd from image config.
-func (w *AppConfigWriter) writeArgv(configDir string) error {
+func writeAppArgv(configDir string, config *oci.ImageConfig) error {
 	var argv bytes.Buffer
 	writer := bufio.NewWriter(&argv)
 
-	for _, line := range w.imageConfig.Entrypoint {
+	for _, line := range config.Entrypoint {
 		_, err := writer.WriteString(strings.TrimSpace(line))
 		if err != nil {
 			return fmt.Errorf("write entrypoint to buffer: %w", err)
@@ -102,7 +87,7 @@ func (w *AppConfigWriter) writeArgv(configDir string) error {
 		}
 	}
 
-	for _, line := range w.imageConfig.Cmd {
+	for _, line := range config.Cmd {
 		_, err := writer.WriteString(strings.TrimSpace(line))
 		if err != nil {
 			return fmt.Errorf("write cmd to buffer: %w", err)
@@ -124,18 +109,5 @@ func (w *AppConfigWriter) writeArgv(configDir string) error {
 		return fmt.Errorf("write argv file: %w", err)
 	}
 
-	return nil
-}
-
-// NoOpBuilderConfig implements BuilderConfig with no-op behavior.
-// Useful for testing or when no config injection is needed.
-type NoOpBuilderConfig struct{}
-
-func NewNoOpBuilderConfig() *NoOpBuilderConfig {
-	return &NoOpBuilderConfig{}
-}
-
-func (p *NoOpBuilderConfig) WriteConfig(ctx context.Context, rootfsDir string) error {
-	// No-op: do nothing
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path"
 	"strconv"
@@ -16,16 +15,12 @@ import (
 	"github.com/opencontainers/go-digest"
 )
 
-type Builder interface {
-	Build(ctx context.Context, provider oci.OciImageSource, opts BuildOptions) (*BuildResult, error)
+type AppFSopts struct {
+	OutputDir     string
+	ImageSource   oci.OciImageSource
+	DeviceBuilder fs.BlockDeviceBuilder
 }
 
-type BuildOptions struct {
-	OutputDir string // where to place final .ext4 files
-	WorkDir   string
-}
-
-// BuildResult contains information about the built artifact
 type BuildResult struct {
 	BlockDevicePath string           // full path to .ext4 file
 	SourceDigest    digest.Digest    // digest of source image
@@ -34,36 +29,20 @@ type BuildResult struct {
 	Cached          bool             // true if existing block device was reused
 }
 
-type builder struct {
-	fsOrchestrator *fs.FSBuilderOrchestrator
-	logger         *slog.Logger
-}
-
-func NewBuilder(fsOrchestrator *fs.FSBuilderOrchestrator) Builder {
-	return &builder{
-		fsOrchestrator: fsOrchestrator,
-		logger:         slog.Default(),
-	}
-}
-
-func (b *builder) Build(ctx context.Context, provider oci.OciImageSource, opts BuildOptions) (*BuildResult, error) {
+func BuildAppFs(ctx context.Context, opts *AppFSopts) (*BuildResult, error) {
 	startTime := time.Now()
 	buildTimeStamp := startTime.Unix()
-
-	b.logger.InfoContext(ctx, "starting build", "providerInfo", provider.Info())
 
 	if err := os.MkdirAll(opts.OutputDir, 0o755); err != nil {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	image, err := provider.GetImage(ctx)
+	image, err := opts.ImageSource.GetImage(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to provide image: %w", err)
 	}
 
 	digestHex := image.Digest.Hex()
-	b.logger = b.logger.With("digest", digestHex)
-	b.logger.InfoContext(ctx, "image fetched", "layers", len(image.Layers))
 
 	// build is fresh invoked so set the wanted to this build
 	wantedFile := path.Join(opts.OutputDir, digestHex+".wanted")
@@ -72,22 +51,30 @@ func (b *builder) Build(ctx context.Context, provider oci.OciImageSource, opts B
 		return nil, fmt.Errorf("error writing wanted file: %w", err)
 	}
 
-	// Create app config writer for this image
-	appConfigWriter := fs.NewAppConfigWriter(image.Config)
-
-	// Use orchestrator to build filesystem from layers
-	fsResult, err := b.fsOrchestrator.BuildFromLayers(
-		ctx,
-		image.Layers,
-		appConfigWriter,
-		fs.FSBuildOptions{
-			OutputDir: opts.OutputDir,
-			WorkDir:   opts.WorkDir,
-			Label:     digestHex[:12],
-		},
-	)
+	tmpDevicePath := path.Join(opts.OutputDir, digestHex+"_tmp.ext4")
+	appDevice, err := opts.DeviceBuilder.NewDevice(ctx, fs.BlockDeviceOptions{
+		OutputFilePath: tmpDevicePath,
+		SizeBytes:      image.Manifest.Size * 3,
+		Label:          "APP_FS",
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to build filesystem: %w", err)
+		return nil, fmt.Errorf("appfs from image %s: %w", digestHex, err)
+	}
+
+	mountDir, err := appDevice.Mount()
+	if err != nil {
+		return nil, fmt.Errorf("appfs from image %s: %w", digestHex, err)
+	}
+	defer appDevice.Unmount()
+
+	err = fs.UnpackImage(ctx, image.Layers, mountDir)
+	if err != nil {
+		return nil, fmt.Errorf("appfs from image %s: %w", digestHex, err)
+	}
+
+	err = fs.WriteContainerConfig(ctx, image.Config, mountDir)
+	if err != nil {
+		return nil, fmt.Errorf("appfs from image %s: %w", digestHex, err)
 	}
 
 	if !isNewstBuild(wantedFile, buildTimeStamp) {
@@ -95,15 +82,12 @@ func (b *builder) Build(ctx context.Context, provider oci.OciImageSource, opts B
 	}
 
 	// atomic publish of newest build
+	appDevice.Unmount()
 	outputFilePath := path.Join(opts.OutputDir, digestHex+".ext4")
-	err = os.Rename(fsResult.BlockDevicePath, outputFilePath)
+	err = os.Rename(tmpDevicePath, outputFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("error publishing buildresult: %w", err)
+		return nil, fmt.Errorf("appf from image %s: %w", digestHex, err)
 	}
-
-	b.logger.InfoContext(ctx, "build completed successfully",
-		"size_mb", fsResult.SizeBytes/1024/1024,
-		"duration", time.Since(startTime))
 
 	return &BuildResult{
 		BlockDevicePath: outputFilePath,

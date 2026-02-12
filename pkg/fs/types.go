@@ -2,28 +2,23 @@ package fs
 
 import (
 	"context"
-	"time"
 )
 
-// BuilderConfig abstracts what metadata/config to inject into a filesystem.
-// Different filesystem types (AppFs, StateFS) implement this interface to inject
-// their own metadata/configuration into the rootfs before block device creation.
-type BuilderConfig interface {
-	// WriteConfig injects custom metadata into the rootfs directory.
-	// This is called after layer flattening but before block device creation.
-	WriteConfig(ctx context.Context, rootfsDir string) error
+type BlockDeviceBuilder interface {
+	// Creates an ext4 image with minimal size for the content
+	NewDevice(ctx context.Context, opts BlockDeviceOptions) (BlockDevice, error)
 }
 
-// FSBuildOptions specifies parameters for building a filesystem from layers or directory.
-type FSBuildOptions struct {
-	OutputDir string // directory to place final .ext4 file
-	WorkDir   string // temporary directory for build artifacts
-	Label     string // ext4 filesystem label (optional)
+type BlockDeviceOptions struct {
+	OutputFilePath string // Path of the dir the device is created in
+	SizeBytes      int64  // Blockdevice size in bytes (for journaled block devices greater than 6144 bytes)
+	Label          string // filesystem label (optional)
 }
 
-// FSBuildResult contains the output of a filesystem build operation.
-type FSBuildResult struct {
-	BlockDevicePath string        // path to generated .ext4 file
-	SizeBytes       int64         // filesystem size in bytes
-	BuildTime       time.Duration // time taken to build
+type BlockDevice interface {
+	Mount() (string, error)
+	Unmount() error
+	SizeBytes() int64
+	Label() string
+	Path() string
 }

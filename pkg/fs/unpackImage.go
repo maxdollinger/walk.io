@@ -25,23 +25,13 @@ import (
 	"github.com/maxdollinger/walk.io/pkg/oci"
 )
 
-type FsBuilder interface {
-	BuildFs(ctx context.Context, layers []oci.Layer, targetDir string) error
-}
-
-type LayerFlattener struct{}
-
-func NewLayerFlattener() *LayerFlattener {
-	return &LayerFlattener{}
-}
-
-func (f *LayerFlattener) BuildFs(ctx context.Context, layers []oci.Layer, targetDir string) error {
+func UnpackImage(ctx context.Context, layers []oci.Layer, targetDir string) error {
 	if err := os.MkdirAll(targetDir, 0o755); err != nil {
 		return fmt.Errorf("create target directory: %w", err)
 	}
 
 	for i, layer := range layers {
-		if err := f.extractLayer(ctx, layer, targetDir); err != nil {
+		if err := extractLayer(ctx, layer, targetDir); err != nil {
 			return fmt.Errorf("extract layer %d: %w", i, err)
 		}
 	}
@@ -49,7 +39,7 @@ func (f *LayerFlattener) BuildFs(ctx context.Context, layers []oci.Layer, target
 	return nil
 }
 
-func (f *LayerFlattener) extractLayer(ctx context.Context, layer oci.Layer, targetDir string) error {
+func extractLayer(ctx context.Context, layer oci.Layer, targetDir string) error {
 	reader, err := layer.Compressed(ctx)
 	if err != nil {
 		return fmt.Errorf("get compressed layer: %w", err)
@@ -74,13 +64,13 @@ func (f *LayerFlattener) extractLayer(ctx context.Context, layer oci.Layer, targ
 		}
 
 		if isWhiteout(header.Name) {
-			if err := f.handleWhiteout(targetDir, header.Name); err != nil {
+			if err := handleWhiteout(targetDir, header.Name); err != nil {
 				return fmt.Errorf("handle whiteout: %w", err)
 			}
 			continue
 		}
 
-		if err := f.extractTarEntry(targetDir, header, tarReader); err != nil {
+		if err := extractTarEntry(targetDir, header, tarReader); err != nil {
 			return fmt.Errorf("extract tar entry %q: %w", header.Name, err)
 		}
 
@@ -97,7 +87,7 @@ func isWhiteout(name string) bool {
 }
 
 // handleWhiteout removes a file or directory indicated by a whiteout marker
-func (f *LayerFlattener) handleWhiteout(targetDir, whiteoutPath string) error {
+func handleWhiteout(targetDir, whiteoutPath string) error {
 	// Remove .wh. prefix to get the actual filename
 	dir, file := filepath.Split(filepath.Clean(whiteoutPath))
 	actualName := strings.TrimPrefix(file, ".wh.")
@@ -128,7 +118,7 @@ func (f *LayerFlattener) handleWhiteout(targetDir, whiteoutPath string) error {
 }
 
 // extractTarEntry extracts a single tar entry to the target directory
-func (f *LayerFlattener) extractTarEntry(targetDir string, header *tar.Header, reader io.Reader) error {
+func extractTarEntry(targetDir string, header *tar.Header, reader io.Reader) error {
 	// Sanitize path to prevent directory traversal
 	targetPath := filepath.Join(targetDir, filepath.Clean(header.Name))
 
@@ -152,6 +142,7 @@ func (f *LayerFlattener) extractTarEntry(targetDir string, header *tar.Header, r
 			return fmt.Errorf("mkdir parent: %w", err)
 		}
 
+		// Create the file
 		file, err := os.OpenFile(targetPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
 		if err != nil {
 			return fmt.Errorf("open file: %w", err)
