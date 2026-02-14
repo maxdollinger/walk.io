@@ -1,4 +1,4 @@
-package runtime
+package vm
 
 import (
 	"path"
@@ -12,7 +12,6 @@ const WALKIO_PATH = "/var/lib/walkio/"
 type VMConfig struct {
 	AppID       string        // which app this VM is running
 	AppFsPath   string        // path to /var/lib/walkio/apps/{digest}.ext4
-	StateFsPath string        // path to /var/lib/walkio/state/{uuid}.ext4
 	BaseVersion string        // base bundle version (e.g., "v1.0") for reference/logging
 	VCPU        int           // number of vCPUs (default: 1)
 	Memory      int           // memory in MB (default: 512)
@@ -33,19 +32,14 @@ func (c *VMConfig) GetFirecrackerPath() string {
 
 // VMInstance represents a running Firecracker VM instance (a Crutch).
 type VMInstance struct {
-	ID         string                 // UUID of this VM instance
-	AppID      string                 // which app is running
-	PID        int                    // firecracker process PID
-	SocketPath string                 // firecracker control socket path
-	Meta       map[string]interface{} // extensible metadata for future features (networking, etc.)
-	StartedAt  time.Time
-}
-
-// GetStateFsPath computes the state filesystem path from the VM instance ID.
-// This ensures state_fs_path always matches the VM instance UUID.
-// Returns: /var/lib/walkio/state/{id}.ext4
-func (v *VMInstance) GetStateFsPath() string {
-	return path.Join(WALKIO_PATH, "state", v.ID+".ext4")
+	ID           string // UUID of this VM instance
+	PID          int    // firecracker process PID
+	SocketPath   string // firecracker control socket path
+	ConfigPath   string
+	StateDevPath string
+	VMConfig     *VMConfig
+	Meta         map[string]any // extensible metadata for future features (networking, etc.)
+	StartedAt    time.Time
 }
 
 // VMStatus represents the current operational state of a VM.

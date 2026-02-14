@@ -1,4 +1,4 @@
-package runtime
+package vm
 
 import (
 	"context"
@@ -25,7 +25,7 @@ func NewFirecrackerVM(vmsDir string) VMRuntime {
 	}
 }
 
-func (f *firecracker) Start(ctx context.Context, config VMConfig) (*VMInstance, error) {
+func (f *firecracker) Start(ctx context.Context, config VMConfig, stateDevPath string) (*VMInstance, error) {
 	id, err := utils.NewUUID7()
 	if err != nil {
 		return nil, fmt.Errorf("generate vm id: %w", err)
@@ -47,7 +47,7 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig) (*VMInstance, 
 
 	socketPath := filepath.Join(vmDir, "api.sock")
 	configPath := filepath.Join(vmDir, "config.json")
-	fcConfig := f.buildFirecrackerConfig(config, socketPath)
+	fcConfig := f.buildFirecrackerConfig(config, socketPath, stateDevPath)
 	if err := f.writeFirecrackerConfig(configPath, fcConfig); err != nil {
 		f.cleanup(vmDir)
 		return nil, fmt.Errorf("write firecracker config: %w", err)
@@ -86,12 +86,14 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig) (*VMInstance, 
 		"socket", socketPath)
 
 	return &VMInstance{
-		ID:         id,
-		AppID:      config.AppID,
-		PID:        pid,
-		SocketPath: socketPath,
-		Meta:       make(map[string]any),
-		StartedAt:  time.Now(),
+		ID:           id,
+		PID:          pid,
+		SocketPath:   socketPath,
+		ConfigPath:   configPath,
+		StateDevPath: stateDevPath,
+		VMConfig:     &config,
+		Meta:         make(map[string]any),
+		StartedAt:    time.Now(),
 	}, nil
 }
 
@@ -151,7 +153,7 @@ func (f *firecracker) validateConfig(config *VMConfig) error {
 	return nil
 }
 
-func (f *firecracker) buildFirecrackerConfig(config VMConfig, socketPath string) map[string]any {
+func (f *firecracker) buildFirecrackerConfig(config VMConfig, socketPath string, stateDevPath string) map[string]any {
 	return map[string]any{
 		"vm_config": map[string]any{
 			"vcpu_count":   config.VCPU,
@@ -178,7 +180,7 @@ func (f *firecracker) buildFirecrackerConfig(config VMConfig, socketPath string)
 			// Drive 3: StateFS - runtime state (secondary, writable)
 			{
 				"drive_id":       "state",
-				"path_on_host":   config.StateFsPath,
+				"path_on_host":   stateDevPath,
 				"is_root_device": false,
 				"is_read_only":   false,
 			},

@@ -15,10 +15,10 @@ type StateFsOpts struct {
 	OutputDir string
 }
 
-func BuildStateFs(ctx context.Context, blockDeviceBuilder fs.BlockDeviceBuilder, opts *StateFsOpts) (string, error) {
+func BuildStateDevice(ctx context.Context, blockDeviceBuilder fs.BlockDeviceBuilder, opts *StateFsOpts) (fs.BlockDevice, error) {
 	uuid, err := uuid.NewV7()
 	if err != nil {
-		return "", fmt.Errorf("building statefs for %s: %w", opts.AppID, err)
+		return nil, fmt.Errorf("building statefs for %s: %w", opts.AppID, err)
 	}
 
 	devicePath := path.Join(opts.OutputDir, opts.AppID+"_"+uuid.String())
@@ -27,8 +27,8 @@ func BuildStateFs(ctx context.Context, blockDeviceBuilder fs.BlockDeviceBuilder,
 		OutputFilePath: devicePath,
 	})
 	if err != nil {
-		return "", fmt.Errorf("building statefs for %s: %w", opts.AppID, err)
+		return nil, fmt.Errorf("building statefs for %s: %w", opts.AppID, err)
 	}
 
-	return blockDevice.Path(), nil
+	return blockDevice, nil
 }

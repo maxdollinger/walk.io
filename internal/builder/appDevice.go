@@ -16,9 +16,7 @@ import (
 )
 
 type AppFSopts struct {
-	OutputDir     string
-	ImageSource   oci.OciImageSource
-	DeviceBuilder fs.BlockDeviceBuilder
+	OutputDir string
 }
 
 type BuildResult struct {
@@ -29,7 +27,7 @@ type BuildResult struct {
 	Cached          bool             // true if existing block device was reused
 }
 
-func BuildAppFs(ctx context.Context, opts *AppFSopts) (*BuildResult, error) {
+func BuildAppDevice(ctx context.Context, imageSource oci.OciImageSource, deviceBuilder fs.BlockDeviceBuilder, opts *AppFSopts) (*BuildResult, error) {
 	startTime := time.Now()
 	buildTimeStamp := startTime.Unix()
 
@@ -37,7 +35,7 @@ func BuildAppFs(ctx context.Context, opts *AppFSopts) (*BuildResult, error) {
 		return nil, fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	image, err := opts.ImageSource.GetImage(ctx)
+	image, err := imageSource.GetImage(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to provide image: %w", err)
 	}
@@ -52,7 +50,7 @@ func BuildAppFs(ctx context.Context, opts *AppFSopts) (*BuildResult, error) {
 	}
 
 	tmpDevicePath := path.Join(opts.OutputDir, digestHex+"_tmp.ext4")
-	appDevice, err := opts.DeviceBuilder.NewDevice(ctx, fs.BlockDeviceOptions{
+	appDevice, err := deviceBuilder.NewDevice(ctx, fs.BlockDeviceOptions{
 		OutputFilePath: tmpDevicePath,
 		SizeBytes:      image.Manifest.Size * 3,
 		Label:          "APP_FS",
