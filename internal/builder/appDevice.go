@@ -41,6 +41,17 @@ func BuildAppDevice(ctx context.Context, imageSource oci.OciImageSource, deviceB
 	}
 
 	digestHex := image.Digest.Hex()
+	outputFilePath := path.Join(opts.OutputDir, digestHex+".ext4")
+	// if a build for exactly this image is present skip
+	if _, err := os.Stat(outputFilePath); err == nil {
+		return &BuildResult{
+			BlockDevicePath: outputFilePath,
+			SourceDigest:    image.Digest,
+			ImageConfig:     image.Config,
+			BuildTime:       time.Since(startTime),
+			Cached:          true,
+		}, nil
+	}
 
 	// build is fresh invoked so set the wanted to this build
 	wantedFile := path.Join(opts.OutputDir, digestHex+".wanted")
@@ -81,7 +92,6 @@ func BuildAppDevice(ctx context.Context, imageSource oci.OciImageSource, deviceB
 
 	// atomic publish of newest build
 	appDevice.Unmount()
-	outputFilePath := path.Join(opts.OutputDir, digestHex+".ext4")
 	err = os.Rename(tmpDevicePath, outputFilePath)
 	if err != nil {
 		return nil, fmt.Errorf("appf from image %s: %w", digestHex, err)

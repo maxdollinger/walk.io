@@ -57,7 +57,7 @@ func main() {
 	vmConfig := vm.VMConfig{
 		AppID:       appID.String(),
 		AppFsPath:   result.BlockDevicePath,
-		BaseVersion: "v0.1.0",
+		BaseVersion: "v0.1.1",
 		VCPU:        1,
 		Memory:      256,
 		Timeout:     30 * time.Second,
@@ -71,7 +71,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	time.Sleep(5 * time.Second)
+	fmt.Println("Waiting 1s")
+	time.Sleep(1 * time.Second)
 
 	status, err := vmRunner.Status(ctx, instance)
 	if err != nil {
@@ -79,10 +80,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println(status)
+	fmt.Printf("VM-STATUS: %s\n", status)
 
+	fmt.Println("VM-Logs:")
 	content, _ := os.ReadFile(instance.LogPath)
 	fmt.Println(string(content))
-
-	fmt.Println("finished")
 }
