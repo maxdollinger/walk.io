@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,13 +14,11 @@ import (
 
 type firecracker struct {
 	vmsDir string // directory for control
-	logger *slog.Logger
 }
 
 func NewFirecrackerVM(vmsDir string) VMRuntime {
 	return &firecracker{
 		vmsDir: vmsDir,
-		logger: slog.Default(),
 	}
 }
 
@@ -30,11 +27,6 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig, stateDevPath s
 	if err != nil {
 		return nil, fmt.Errorf("generate vm id: %w", err)
 	}
-
-	f.logger.InfoContext(ctx, "starting firecracker vm",
-		"id", id,
-		"vcpu", config.VCPU,
-		"memory_mb", config.Memory)
 
 	if err := f.validateConfig(&config); err != nil {
 		return nil, fmt.Errorf("invalid vm config: %w", err)
@@ -70,20 +62,12 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig, stateDevPath s
 	}
 
 	pid := cmd.Process.Pid
-	f.logger.InfoContext(ctx, "firecracker process started",
-		"id", id,
-		"pid", pid)
 
 	socketSpawnTimeout := time.Second
 	if err := f.waitForSocket(ctx, socketPath, socketSpawnTimeout); err != nil {
 		f.cleanup(vmDir)
 		return nil, fmt.Errorf("firecracker healthcheck failed: %w", err)
 	}
-
-	f.logger.InfoContext(ctx, "firecracker vm started successfully",
-		"id", id,
-		"pid", pid,
-		"socket", socketPath)
 
 	return &VMInstance{
 		ID:           id,
@@ -99,19 +83,15 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig, stateDevPath s
 }
 
 func (f *firecracker) Stop(ctx context.Context, instance *VMInstance) error {
-	f.logger.InfoContext(ctx, "stopping firecracker vm", "id", instance.ID)
-
 	// TODO: Send shutdown command via Firecracker API socket
 	// For now, we just clean up the socket directory
 
 	// Clean up socket directory
 	vmSockDir := filepath.Dir(instance.SocketPath)
 	if err := os.RemoveAll(vmSockDir); err != nil {
-		f.logger.WarnContext(ctx, "failed to cleanup socket directory", "error", err)
 		return err
 	}
 
-	f.logger.InfoContext(ctx, "firecracker vm stopped", "id", instance.ID)
 	return nil
 }
 

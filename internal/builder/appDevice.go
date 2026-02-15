@@ -12,7 +12,6 @@ import (
 
 	"github.com/maxdollinger/walk.io/pkg/fs"
 	"github.com/maxdollinger/walk.io/pkg/oci"
-	"github.com/opencontainers/go-digest"
 )
 
 type AppFSopts struct {
@@ -20,11 +19,9 @@ type AppFSopts struct {
 }
 
 type BuildResult struct {
-	BlockDevicePath string           // full path to .ext4 file
-	SourceDigest    digest.Digest    // digest of source image
-	ImageConfig     *oci.ImageConfig // config from image
-	BuildTime       time.Duration    // time taken to build
-	Cached          bool             // true if existing block device was reused
+	BlockDevicePath string        // full path to .ext4 file
+	BuildTime       time.Duration // time taken to build
+	Cached          bool          // true if existing block device was reused
 }
 
 func BuildAppDevice(ctx context.Context, imageSource oci.OciImageSource, deviceBuilder fs.BlockDeviceBuilder, opts *AppFSopts) (*BuildResult, error) {
@@ -46,8 +43,6 @@ func BuildAppDevice(ctx context.Context, imageSource oci.OciImageSource, deviceB
 	if _, err := os.Stat(outputFilePath); err == nil {
 		return &BuildResult{
 			BlockDevicePath: outputFilePath,
-			SourceDigest:    image.Digest,
-			ImageConfig:     image.Config,
 			BuildTime:       time.Since(startTime),
 			Cached:          true,
 		}, nil
@@ -99,8 +94,6 @@ func BuildAppDevice(ctx context.Context, imageSource oci.OciImageSource, deviceB
 
 	return &BuildResult{
 		BlockDevicePath: outputFilePath,
-		SourceDigest:    image.Digest,
-		ImageConfig:     image.Config,
 		BuildTime:       time.Since(startTime),
 		Cached:          false,
 	}, nil

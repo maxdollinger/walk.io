@@ -78,7 +78,7 @@ func (d *Ext4Device) mountDirName() string {
 // NewDevice heavily shells out for fs operations, maybe I ipmlement more in go later
 func (b *Ext4Builder) NewDevice(ctx context.Context, opts BlockDeviceOptions) (BlockDevice, error) {
 	// min save file size to write journal
-	sizeBytes := max(opts.SizeBytes, int64(7*1024*1024))
+	sizeBytes := max(opts.SizeBytes, int64(5*1024*1024))
 
 	err := createSparseFile(opts.OutputFilePath, sizeBytes)
 	if err != nil {
