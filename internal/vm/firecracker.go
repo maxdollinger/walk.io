@@ -47,7 +47,7 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig, stateDevPath s
 
 	socketPath := filepath.Join(vmDir, "api.sock")
 	configPath := filepath.Join(vmDir, "config.json")
-	fcConfig := f.buildFirecrackerConfig(config, socketPath, stateDevPath)
+	fcConfig := f.buildFirecrackerConfig(config, stateDevPath)
 	if err := f.writeFirecrackerConfig(configPath, fcConfig); err != nil {
 		f.cleanup(vmDir)
 		return nil, fmt.Errorf("write firecracker config: %w", err)
@@ -61,7 +61,7 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig, stateDevPath s
 	}
 	defer logFile.Close()
 
-	cmd := exec.CommandContext(ctx, config.GetFirecrackerPath(), "--config-file", configPath)
+	cmd := exec.CommandContext(ctx, config.GetFirecrackerPath(), "--api-sock", socketPath, "--config-file", configPath)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	if err := cmd.Start(); err != nil {
@@ -90,6 +90,7 @@ func (f *firecracker) Start(ctx context.Context, config VMConfig, stateDevPath s
 		PID:          pid,
 		SocketPath:   socketPath,
 		ConfigPath:   configPath,
+		LogPath:      logPath,
 		StateDevPath: stateDevPath,
 		VMConfig:     &config,
 		Meta:         make(map[string]any),
@@ -153,14 +154,16 @@ func (f *firecracker) validateConfig(config *VMConfig) error {
 	return nil
 }
 
-func (f *firecracker) buildFirecrackerConfig(config VMConfig, socketPath string, stateDevPath string) map[string]any {
+func (f *firecracker) buildFirecrackerConfig(config VMConfig, stateDevPath string) map[string]any {
 	return map[string]any{
-		"vm_config": map[string]any{
+		"boot-source": map[string]any{
+			"kernel_image_path": config.GetKernelPath(),
+			"boot_args":         "console=ttyS0 reboot=k panic=1 init=/vmax/init",
+		},
+		"machine-config": map[string]any{
 			"vcpu_count":   config.VCPU,
 			"mem_size_mib": config.Memory,
-		},
-		"kernel": map[string]any{
-			"kernel_image_path": config.GetKernelPath(),
+			"smt":          false,
 		},
 		"drives": []map[string]any{
 			// Drive 1: RootFS - system initialization (root device, read-only, shared)
@@ -185,10 +188,6 @@ func (f *firecracker) buildFirecrackerConfig(config VMConfig, socketPath string,
 				"is_read_only":   false,
 			},
 		},
-		"ioapic": map[string]any{
-			"enabled": true,
-		},
-		"socket_path": socketPath,
 	}
 }
 
@@ -227,8 +226,8 @@ func (f *firecracker) waitForSocket(ctx context.Context, socketPath string, time
 }
 
 func (f *firecracker) cleanup(vmSockDir string) {
-	err := os.RemoveAll(vmSockDir)
-	if err != nil {
-		f.logger.Error("failed to cleanup vmSocketDir %s: %s", vmSockDir, err)
-	}
+	// err := os.RemoveAll(vmSockDir)
+	// if err != nil {
+	// 	f.logger.Error("failed to cleanup vmSocketDir %s: %s", vmSockDir, err)
+	// }
 }

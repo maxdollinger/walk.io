@@ -36,6 +36,7 @@ type VMInstance struct {
 	PID          int    // firecracker process PID
 	SocketPath   string // firecracker control socket path
 	ConfigPath   string
+	LogPath      string
 	StateDevPath string
 	VMConfig     *VMConfig
 	Meta         map[string]any // extensible metadata for future features (networking, etc.)

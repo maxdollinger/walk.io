@@ -81,5 +81,8 @@ func main() {
 
 	fmt.Println(status)
 
+	content, _ := os.ReadFile(instance.LogPath)
+	fmt.Println(string(content))
+
 	fmt.Println("finished")
 }
