@@ -158,7 +158,7 @@ func (f *firecracker) buildFirecrackerConfig(config VMConfig, stateDevPath strin
 	return map[string]any{
 		"boot-source": map[string]any{
 			"kernel_image_path": config.GetKernelPath(),
-			"boot_args":         "console=ttyS0 reboot=k panic=1 init=/vmax/init",
+			"boot_args":         "console=ttyS0 reboot=k panic=1 init=/walkio/init",
 		},
 		"machine-config": map[string]any{
 			"vcpu_count":   config.VCPU,
