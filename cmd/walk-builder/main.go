@@ -16,10 +16,9 @@ import (
 )
 
 const (
-	WALKIO_BASE = "/var/lib/walkio/"
+	WALKIO_BASE = "/var/walkio/"
 	APP_DIR     = WALKIO_BASE + "app"
 	STATE_DIR   = WALKIO_BASE + "state"
-	VM_DIR      = WALKIO_BASE + "vm"
 )
 
 func main() {
@@ -71,33 +70,34 @@ func main() {
 		Timeout:     30 * time.Second,
 	}
 
-	vmRunner := vm.NewFirecrackerVM(VM_DIR)
-
-	instance, err := vmRunner.Start(ctx, vmConfig, stateResult.BlockDevicePath)
+	machine, err := vm.NewFirecrackerMachine(stateResult.BlockDevicePath, &vmConfig)
+	defer machine.Clean()
 	if err != nil {
 		fmt.Printf("Failed to start VM: %s\n", err)
 		os.Exit(1)
 	}
 
-	logger = logger.With(
-		"vm_id", instance.ID,
-		"vm_pid", instance.PID,
-		"vm_statedAt", instance.StartedAt,
-	)
-
-	status := vm.VMStatusRunning
-	for status == vm.VMStatusRunning {
-		status, err = vmRunner.Status(ctx, instance)
-		if err != nil {
-			fmt.Printf("Failed get VM Stats: %s\n", err)
-			os.Exit(1)
-		}
-		time.Sleep(50 * time.Millisecond)
+	if err := machine.Start(); err != nil {
+		logger.Error("failed first start", "err", err)
 	}
 
-	logger.Info("Finished execution", "vm_status", status, "exec_time", time.Since(startTime).Seconds())
+	time.Sleep(time.Second)
+	if err := machine.Stop(); err != nil {
+		logger.Error("failed first stop", "err", err)
+	}
+
+	if err := machine.Start(); err != nil {
+		logger.Error("failed second start", "err", err)
+	}
+
+	time.Sleep(time.Second)
+	if err := machine.Stop(); err != nil {
+		logger.Error("failed second stop", "err", err)
+	}
+
+	logger.Info("Finished execution", "exec_time", time.Since(startTime).Seconds())
 
 	fmt.Println("---- VM-Logs -----")
 	fmt.Println("")
-	_ = utils.TailPollUntilIdle(instance.LogPath, os.Stdout, 500*time.Millisecond, 20*time.Millisecond)
+	_ = utils.TailPollUntilIdle(machine.LogFile.Name(), os.Stdout, 800*time.Millisecond, 20*time.Millisecond)
 }

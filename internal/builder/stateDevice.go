@@ -24,7 +24,7 @@ func BuildStateDevice(ctx context.Context, blockDeviceBuilder fs.BlockDeviceBuil
 		return nil, fmt.Errorf("building statefs for %s: %w", opts.AppID, err)
 	}
 
-	devicePath := path.Join(opts.OutputDir, opts.AppID+"_"+uuid.String())
+	devicePath := path.Join(opts.OutputDir, uuid.String()+".ext4")
 	_, err = blockDeviceBuilder.NewDevice(ctx, fs.BlockDeviceOptions{
 		SizeBytes:      opts.SizeBytes,
 		OutputFilePath: devicePath,

@@ -1,140 +1,138 @@
 package vm
 
 import (
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
-	"time"
 
 	"github.com/maxdollinger/walk.io/pkg/utils"
 )
 
-type firecracker struct {
-	vmsDir string // directory for control
+const (
+	LOG_DIR = "/var/walkio/machines/logs"
+	VM_DIR  = "/var/walkio/machines/"
+)
+
+type FirecrackerMachine struct {
+	ID            string
+	Cmd           *exec.Cmd
+	LogFile       *os.File
+	SocketPath    string
+	ConfigPath    string
+	MachineConfig *VMConfig
 }
 
-func NewFirecrackerVM(vmsDir string) VMRuntime {
-	return &firecracker{
-		vmsDir: vmsDir,
-	}
-}
-
-func (f *firecracker) Start(ctx context.Context, config VMConfig, stateDevPath string) (*VMInstance, error) {
+func NewFirecrackerMachine(stateDevPath string, config *VMConfig) (*FirecrackerMachine, error) {
 	id, err := utils.NewUUID7()
 	if err != nil {
 		return nil, fmt.Errorf("generate vm id: %w", err)
 	}
 
-	if err := f.validateConfig(&config); err != nil {
-		return nil, fmt.Errorf("invalid vm config: %w", err)
+	machineDir := path.Join(VM_DIR, id)
+	if err := os.MkdirAll(machineDir, 0o755); err != nil {
+		return nil, fmt.Errorf("could not create machineDir: %w", err)
 	}
 
-	vmDir := filepath.Join(f.vmsDir, id)
-	if err := os.MkdirAll(vmDir, 0o700); err != nil {
-		return nil, fmt.Errorf("create socket directory: %w", err)
+	fcConfig := buildFirecrackerConfig(config, stateDevPath)
+	data, err := json.Marshal(fcConfig)
+	if err != nil {
+		return nil, fmt.Errorf("marshal config: %w", err)
 	}
 
-	socketPath := filepath.Join(vmDir, "api.sock")
-	configPath := filepath.Join(vmDir, "config.json")
-	fcConfig := f.buildFirecrackerConfig(config, stateDevPath)
-	if err := f.writeFirecrackerConfig(configPath, fcConfig); err != nil {
-		f.cleanup(vmDir)
-		return nil, fmt.Errorf("write firecracker config: %w", err)
+	configPath := filepath.Join(machineDir, id+".json")
+	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+		return nil, fmt.Errorf("write config file: %w", err)
 	}
 
-	logPath := filepath.Join(vmDir, "firecracker.log")
+	socketPath := filepath.Join(machineDir, id+".sock")
+	logPath := filepath.Join(LOG_DIR, id+".log")
 	logFile, err := os.Create(logPath)
 	if err != nil {
-		f.cleanup(vmDir)
-		return nil, fmt.Errorf("create log file: %w", err)
-	}
-	defer logFile.Close()
-
-	cmd := exec.CommandContext(ctx, config.GetFirecrackerPath(), "--api-sock", socketPath, "--config-file", configPath)
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	if err := cmd.Start(); err != nil {
-		f.cleanup(vmDir)
-		return nil, fmt.Errorf("start firecracker process: %w", err)
+		err = errors.Join(err, os.RemoveAll(machineDir))
+		return nil, fmt.Errorf("could not create log file: %w", err)
 	}
 
-	pid := cmd.Process.Pid
-
-	socketSpawnTimeout := time.Second
-	if err := f.waitForSocket(ctx, socketPath, socketSpawnTimeout); err != nil {
-		f.cleanup(vmDir)
-		return nil, fmt.Errorf("firecracker healthcheck failed: %w", err)
+	instance := FirecrackerMachine{
+		ID:            id,
+		Cmd:           nil,
+		SocketPath:    socketPath,
+		LogFile:       logFile,
+		ConfigPath:    configPath,
+		MachineConfig: config,
 	}
 
-	return &VMInstance{
-		ID:           id,
-		PID:          pid,
-		SocketPath:   socketPath,
-		ConfigPath:   configPath,
-		LogPath:      logPath,
-		StateDevPath: stateDevPath,
-		VMConfig:     &config,
-		Meta:         make(map[string]any),
-		StartedAt:    time.Now(),
-	}, nil
+	return &instance, nil
 }
 
-func (f *firecracker) Stop(ctx context.Context, instance *VMInstance) error {
-	// TODO: Send shutdown command via Firecracker API socket
-	// For now, we just clean up the socket directory
+func (m *FirecrackerMachine) Start() error {
+	_ = os.Remove(m.SocketPath)
 
-	// Clean up socket directory
-	vmSockDir := filepath.Dir(instance.SocketPath)
-	if err := os.RemoveAll(vmSockDir); err != nil {
-		return err
+	cmd := exec.Command(m.MachineConfig.GetFirecrackerPath(), "--api-sock", m.SocketPath, "--config-file", m.ConfigPath)
+	cmd.Stdout = m.LogFile
+	cmd.Stderr = m.LogFile
+	if err := cmd.Start(); err != nil {
+		err = errors.Join(err, m.Clean())
+		return fmt.Errorf("start firecracker process: %w", err)
 	}
 
 	return nil
 }
 
-func (f *firecracker) Status(ctx context.Context, instance *VMInstance) (VMStatus, error) {
-	// TODO change this to check for socketFile and send a healthcheck query
-	if instance.PID <= 0 {
+func (m *FirecrackerMachine) Status() (VMStatus, error) {
+	if m.Cmd == nil {
 		return VMStatusStopped, nil
 	}
-
-	proc, err := os.FindProcess(instance.PID)
-	if err != nil {
-		return VMStatusStopped, nil
-	}
-	defer proc.Release()
 
 	// Try to send signal 0 to check if process is alive
-	if err := proc.Signal(os.Signal(nil)); err != nil {
+	if err := m.Cmd.Process.Signal(os.Signal(nil)); err != nil {
 		return VMStatusStopped, nil
 	}
 
 	return VMStatusRunning, nil
 }
 
-func (f *firecracker) validateConfig(config *VMConfig) error {
-	if _, err := os.Stat(config.GetRootFSPath()); err != nil {
-		return fmt.Errorf("rootfs not found at %s: %w", config.GetRootFSPath(), err)
+func (m *FirecrackerMachine) Stop() error {
+	if m.Cmd == nil {
+		return nil
 	}
-	if _, err := os.Stat(config.AppFsPath); err != nil {
-		return fmt.Errorf("appfs not found at %s: %w", config.AppFsPath, err)
+
+	_ = m.Cmd.Process.Kill()
+	err := m.Cmd.Wait()
+	if err != nil {
+		return err
 	}
-	if _, err := os.Stat(config.GetKernelPath()); err != nil {
-		return fmt.Errorf("kernel not found at %s: %w", config.GetKernelPath(), err)
+
+	err = os.Remove(m.SocketPath)
+	if err != nil {
+		return err
 	}
-	if config.VCPU <= 0 {
-		config.VCPU = 1
-	}
-	if config.Memory <= 0 {
-		config.Memory = 128
-	}
+	m.Cmd = nil
 	return nil
 }
 
-func (f *firecracker) buildFirecrackerConfig(config VMConfig, stateDevPath string) map[string]any {
+func (m *FirecrackerMachine) Clean() error {
+	if m.Cmd != nil {
+		return fmt.Errorf("machine %s is still running", m.ID)
+	}
+
+	err := os.RemoveAll(path.Join(VM_DIR, m.ID))
+	if err != nil {
+		return fmt.Errorf("could not clean vm %s: %w", m.ID, err)
+	}
+
+	_ = m.LogFile.Close()
+
+	m.ConfigPath = ""
+	m.SocketPath = ""
+
+	return nil
+}
+
+func buildFirecrackerConfig(config *VMConfig, stateDevPath string) map[string]any {
 	return map[string]any{
 		"boot-source": map[string]any{
 			"kernel_image_path": config.GetKernelPath(),
@@ -169,45 +167,4 @@ func (f *firecracker) buildFirecrackerConfig(config VMConfig, stateDevPath strin
 			},
 		},
 	}
-}
-
-func (f *firecracker) writeFirecrackerConfig(path string, config map[string]any) error {
-	data, err := json.Marshal(config)
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write config file: %w", err)
-	}
-
-	return nil
-}
-
-func (f *firecracker) waitForSocket(ctx context.Context, socketPath string, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		if _, err := os.Stat(socketPath); err == nil {
-			return nil
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			if time.Now().After(deadline) {
-				return fmt.Errorf("socket did not appear within %v", timeout)
-			}
-		}
-	}
-}
-
-func (f *firecracker) cleanup(vmSockDir string) {
-	// err := os.RemoveAll(vmSockDir)
-	// if err != nil {
-	// 	f.logger.Error("failed to cleanup vmSocketDir %s: %s", vmSockDir, err)
-	// }
 }
