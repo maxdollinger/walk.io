@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 
+	"github.com/maxdollinger/walk.io/pkg/network"
 	"github.com/maxdollinger/walk.io/pkg/utils"
 )
 
@@ -24,6 +25,7 @@ type FirecrackerMachine struct {
 	SocketPath    string
 	ConfigPath    string
 	MachineConfig *VMConfig
+	NetworkConfig *network.NetworkConfig
 }
 
 func NewFirecrackerMachine(stateDevPath string, config *VMConfig) (*FirecrackerMachine, error) {

@@ -12,7 +12,6 @@ import (
 	"github.com/maxdollinger/walk.io/internal/vm"
 	"github.com/maxdollinger/walk.io/pkg/fs"
 	"github.com/maxdollinger/walk.io/pkg/oci"
-	"github.com/maxdollinger/walk.io/pkg/utils"
 )
 
 const (
@@ -22,7 +21,6 @@ const (
 )
 
 func main() {
-	startTime := time.Now()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	ctx := context.TODO()
 
@@ -77,6 +75,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	startTime := time.Now()
 	if err := machine.Start(); err != nil {
 		logger.Error("failed first start", "err", err)
 	}
@@ -96,8 +95,4 @@ func main() {
 	}
 
 	logger.Info("Finished execution", "exec_time", time.Since(startTime).Seconds())
-
-	fmt.Println("---- VM-Logs -----")
-	fmt.Println("")
-	_ = utils.TailPollUntilIdle(machine.LogFile.Name(), os.Stdout, 800*time.Millisecond, 20*time.Millisecond)
 }

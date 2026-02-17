@@ -7,6 +7,12 @@ import (
 
 const WALKIO_PATH = "/var/lib/walkio/"
 
+// ExposedPort represents a container port exposed by the OCI image
+type ExposedPort struct {
+	Port     int    // Port number
+	Protocol string // Protocol: "tcp" or "udp"
+}
+
 // VMConfig holds essential Firecracker VM configuration.
 // This is intentionally minimal to keep the design clean and extensible.
 type VMConfig struct {
@@ -16,6 +22,10 @@ type VMConfig struct {
 	VCPU        int           // number of vCPUs (default: 1)
 	Memory      int           // memory in MB (default: 512)
 	Timeout     time.Duration // operation timeout
+
+	// Network configuration (default: true)
+	NetworkEnabled bool          // Whether to setup networking for this VM
+	ExposedPorts   []ExposedPort // Ports exposed by the OCI image
 }
 
 func (c *VMConfig) GetRootFSPath() string {
@@ -28,19 +38,6 @@ func (c *VMConfig) GetKernelPath() string {
 
 func (c *VMConfig) GetFirecrackerPath() string {
 	return path.Join(WALKIO_PATH, "base", c.BaseVersion, "firecracker")
-}
-
-// VMInstance represents a running Firecracker VM instance (a Crutch).
-type VMInstance struct {
-	ID           string // UUID of this VM instance
-	PID          int    // firecracker process PID
-	SocketPath   string // firecracker control socket path
-	ConfigPath   string
-	LogPath      string
-	StateDevPath string
-	VMConfig     *VMConfig
-	Meta         map[string]any // extensible metadata for future features (networking, etc.)
-	StartedAt    time.Time
 }
 
 // VMStatus represents the current operational state of a VM.

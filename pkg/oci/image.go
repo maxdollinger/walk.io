@@ -14,11 +14,12 @@ type Image struct {
 
 // ImageConfig contains OCI runtime configuration
 type ImageConfig struct {
-	Entrypoint []string
-	Cmd        []string
-	Env        []string
-	WorkingDir string
-	User       string
+	Entrypoint   []string
+	Cmd          []string
+	Env          []string
+	WorkingDir   string
+	User         string
+	ExposedPorts []string // OCI format: "80/tcp", "443/tcp", "53/udp"
 }
 
 // Manifest represents the OCI manifest

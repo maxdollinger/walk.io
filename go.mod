@@ -3,11 +3,16 @@ module github.com/maxdollinger/walk.io
 go 1.25.5
 
 require (
+	github.com/google/uuid v1.6.0
 	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/opencontainers/go-digest v1.0.0
 )
 
-require github.com/google/uuid v1.6.0 // indirect
+require (
+	github.com/coreos/go-iptables v0.8.0 // indirect
+	github.com/vishvananda/netlink v1.2.1-beta.2 // indirect
+	github.com/vishvananda/netns v0.0.0-20200728191858-db3c7e526aae // indirect
+)
 
 require (
 	github.com/containerd/stargz-snapshotter/estargz v0.18.1 // indirect
